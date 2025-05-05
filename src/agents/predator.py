@@ -13,8 +13,7 @@ class Predator(Agent):
     """
     Predator agent that hunts prey for energy.
     
-    Attributes:
-        energy_decay_rate (float): Energy lost per timestep.
+    Predators lose energy when moving (like prey) and gain energy by catching prey.
     """
     
     def __init__(self, position: np.ndarray, energy: float = 150.0):
@@ -29,11 +28,13 @@ class Predator(Agent):
         self.type = "predator"
         
         # Predator-specific attributes
-        self.energy_decay_rate = 0.5  # Additional energy lost per timestep
         self.reproduction_threshold = 200.0  # Energy needed to reproduce
         self.reproduction_cost = 100.0  # Energy lost during reproduction
         self.reproduction_cooldown = 30  # Timesteps between reproduction attempts
         self.initial_energy = 150.0  # Starting energy for offspring
+        
+        # Movement cost is defined in the World._move_agent method
+        # and will be applied the same way as for prey
         
         # Policy network (will be set by controller)
         self.policy = None
@@ -130,15 +131,14 @@ class Predator(Agent):
         """
         Update agent state after action.
         
-        For predator, lose energy over time.
-        
         Args:
             observation (Dict[str, Any]): Current observation.
         """
+        # Call base class update (increments age)
         super().update(observation)
         
-        # Predators lose energy over time regardless of movement
-        self.apply_energy_cost(self.energy_decay_rate)
+        # Energy costs for movement are now handled in World._move_agent()
+        # just like for prey, so we don't need to apply any additional energy costs here
     
     def get_color(self) -> Tuple[int, int, int]:
         """

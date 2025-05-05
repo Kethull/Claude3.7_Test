@@ -393,7 +393,7 @@ class SimulationApp:
                 reward = 0.0
                 
                 # Base survival reward
-                reward += 0.05  # Smaller base reward than prey
+                reward += 0.1  
                 
                 # Energy-based reward
                 if agent.energy > agent.reproduction_threshold:
@@ -403,8 +403,8 @@ class SimulationApp:
                 # We'll add +2.0 reward for successful hunts in the world._handle_interactions method
                 
                 # Exploration penalty for staying still
-                if observation.get("last_action", None) == 0:  # Stay action
-                    reward -= 0.1  # Small penalty for not hunting
+                # if observation.get("last_action", None) == 0:  # Stay action
+                #     reward -= 0.1  # Small penalty for not hunting
                 
                 # Store experience in buffer
                 self.predator_buffer.add(
