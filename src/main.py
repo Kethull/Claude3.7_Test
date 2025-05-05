@@ -46,7 +46,7 @@ DEFAULT_CONFIG = {
     "REPLAY_INTERVAL": 1,    # Timesteps between replay saves
     "DISPLAY_WIDTH": 1900,
     "DISPLAY_HEIGHT": 900,
-    "SPATIAL_CELL_SIZE": 15  # Cell size for spatial partitioning
+    "SPATIAL_CELL_SIZE": 30  # Cell size for spatial partitioning
 }
 
 # Add this to main.py
