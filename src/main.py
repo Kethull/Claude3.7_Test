@@ -41,7 +41,7 @@ DEFAULT_CONFIG = {
     "LEARNING_RATE": 3e-4,
     "GAMMA": 0.99,
     "BATCH_SIZE": 128,
-    "TRAIN_INTERVAL": 1000,  # Timesteps between training
+    "TRAIN_INTERVAL": 10,  # Timesteps between training
     "SAVE_INTERVAL": 5000,   # Timesteps between saving
     "REPLAY_INTERVAL": 1,    # Timesteps between replay saves
     "DISPLAY_WIDTH": 1900,

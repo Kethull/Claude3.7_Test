@@ -29,7 +29,7 @@ class Prey(Agent):
         self.type = "prey"
         
         # Prey-specific attributes
-        self.energy_gain_rate = 1.0  # Energy gained per timestep when staying still
+        self.energy_gain_rate = 0.1  # Energy gained per timestep when staying still
         self.reproduction_threshold = 120.0  # Energy needed to reproduce
         self.reproduction_cost = 50.0  # Energy lost during reproduction
         self.reproduction_cooldown = 20  # Timesteps between reproduction attempts
@@ -47,11 +47,11 @@ class Prey(Agent):
             action = self.policy.get_deterministic_action(obs_tensor).item()
             return action
         
-        # No policy yet, use position-influenced random actions
-        # Use agent id and position to seed the random choice
-        seed = hash(self.id) + int(self.position[0] * 100) + int(self.position[1] * 100) + observation["timestamp"]
-        np.random.seed(seed)
-        return np.random.randint(0, 5)
+        # No policy yet, use random actions with a unique seed for each agent
+        # Use a hash of the agent's id modulo 2^32-1 to stay within valid range
+        seed = (hash(self.id) + observation["timestamp"]) % (2**32 - 1)
+        rng = np.random.RandomState(seed)  # Create a separate random number generator
+        return rng.randint(0, 5)  # Use the agent-specific RNG
     
     def _prepare_observation(self, observation: Dict[str, Any]) -> np.ndarray:
         """
