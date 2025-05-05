@@ -225,10 +225,15 @@ class World:
         This batches operations and improves performance:
         1. Gather all actions first
         2. Apply movements in batch
-        3. Apply separation forces to prevent overlapping
+        3. Apply separation forces only when needed
         4. Handle interactions in batch
         5. Handle reproduction at the end
         """
+        # Early exit for empty world
+        if not self.agents:
+            self.timestep += 1
+            return
+        
         self.timestep += 1
         
         # For tracking new agents from reproduction
@@ -254,27 +259,37 @@ class World:
         for agent, (action, observation) in agent_actions.items():
             self._move_agent(agent, action)
         
-        # STEP 3: Update spatial index with all new positions at once
+        # STEP 3: Update spatial index only for agents that moved
         if self.spatial_index is not None:
-            # Completely rebuild spatial index (faster than many individual updates)
-            self.spatial_index.clear()
-            for agent in self.agents:
-                if agent.alive:
-                    self.spatial_index.insert(agent)
+            for agent, (action, observation) in agent_actions.items():
+                # Only update spatial index if agent actually moved
+                if action != 0:  # Not the stay action
+                    # The position has already been updated in _move_agent
+                    # We can use the old_positions dict to update the spatial index
+                    old_position = old_positions[agent]
+                    self.spatial_index.update(agent, old_position)
         
         # STEP 4: Apply separation forces to prevent overlapping
-        # Multiple passes for better results
-        for _ in range(self.separation_passes):
-            for agent in self.agents:
-                if not agent.alive:
-                    continue
-                
-                # Apply separation forces
-                self.apply_separation(
-                    agent, 
-                    separation_radius=self.separation_radius,
-                    separation_strength=self.separation_strength
-                )
+        # Only do one pass and only check agents that are actually close
+        agents_to_separate = []
+        
+        # First, identify agents that need separation
+        for agent in self.agents:
+            if not agent.alive:
+                continue
+            
+            nearby = self._get_nearby_agents(agent, self.separation_radius)
+            if nearby:  # Only add if there are actually nearby agents
+                agents_to_separate.append(agent)
+        
+        # Then apply separation only to those agents
+        for agent in agents_to_separate:
+            # Apply separation forces
+            self.apply_separation(
+                agent, 
+                separation_radius=self.separation_radius,
+                separation_strength=self.separation_strength
+            )
         
         # STEP 5: Process all predator-prey interactions
         predator_agents = [a for a in self.agents if a.alive and a.type == "predator"]
@@ -388,6 +403,26 @@ class World:
         Returns:
             List[Agent]: List of nearby agents.
         """
+        # Quick check - if there are very few agents, it's faster to just check them all
+        # rather than using the spatial index
+        if len(self.agents) <= 5:
+            nearby = []
+            for other in self.agents:
+                if other is agent:
+                    continue
+                    
+                # Calculate distance with wraparound
+                dx = min(abs(agent.position[0] - other.position[0]), 
+                        self.width - abs(agent.position[0] - other.position[0]))
+                dy = min(abs(agent.position[1] - other.position[1]), 
+                        self.height - abs(agent.position[1] - other.position[1]))
+                
+                if dx*dx + dy*dy <= radius*radius:
+                    nearby.append(other)
+                    
+            return nearby
+        
+        # If we have more agents, use the spatial index if available
         if self.spatial_index is not None:
             return self.spatial_index.query_radius(agent.position, radius)
         
@@ -399,9 +434,9 @@ class World:
                 
             # Calculate distance with wraparound
             dx = min(abs(agent.position[0] - other.position[0]), 
-                     self.width - abs(agent.position[0] - other.position[0]))
+                    self.width - abs(agent.position[0] - other.position[0]))
             dy = min(abs(agent.position[1] - other.position[1]), 
-                     self.height - abs(agent.position[1] - other.position[1]))
+                    self.height - abs(agent.position[1] - other.position[1]))
             
             if dx*dx + dy*dy <= radius*radius:
                 nearby.append(other)
@@ -473,6 +508,10 @@ class World:
         
         # Get nearby agents using spatial index if available
         nearby_agents = self._get_nearby_agents(agent, separation_radius)
+        
+        # Quick check - if no nearby agents, skip calculation completely
+        if not nearby_agents:
+            return agent.position
         
         # Calculate separation force
         separation_force = agent.calculate_separation_force(

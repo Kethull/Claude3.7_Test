@@ -233,7 +233,7 @@ class Renderer:
         # Clear screen
         try:
             self.screen.fill(self.bg_color)
-            print("Screen cleared with background color")
+            # Removed excessive logging
         except Exception as e:
             print(f"ERROR filling screen: {e}")
             return
@@ -271,44 +271,7 @@ class Renderer:
         
         # Cap framerate
         self.frame_time = self.clock.tick(self.fps) / 1000.0
-    
-    def _render_grid(self, world) -> None:
-        """
-        Render the world grid.
-        
-        Args:
-            world: World object containing dimensions.
-        """
-        if not self.camera:
-            return
-        
-        # Grid spacing in world units
-        grid_spacing = 50
-        
-        # Calculate grid boundaries based on screen and camera
-        left = int(self.camera.position[0] - self.width / (2 * self.camera.zoom))
-        right = int(self.camera.position[0] + self.width / (2 * self.camera.zoom))
-        top = int(self.camera.position[1] - self.height / (2 * self.camera.zoom))
-        bottom = int(self.camera.position[1] + self.height / (2 * self.camera.zoom))
-        
-        # Adjust for grid spacing
-        left = (left // grid_spacing) * grid_spacing
-        right = ((right // grid_spacing) + 1) * grid_spacing
-        top = (top // grid_spacing) * grid_spacing
-        bottom = ((bottom // grid_spacing) + 1) * grid_spacing
-        
-        # Draw vertical grid lines
-        for x in range(left, right + 1, grid_spacing):
-            start_pos = self.camera.world_to_screen(np.array([x, top]), self.width, self.height)
-            end_pos = self.camera.world_to_screen(np.array([x, bottom]), self.width, self.height)
-            pygame.draw.line(self.screen, self.grid_color, start_pos, end_pos, 1)
-        
-        # Draw horizontal grid lines
-        for y in range(top, bottom + 1, grid_spacing):
-            start_pos = self.camera.world_to_screen(np.array([left, y]), self.width, self.height)
-            end_pos = self.camera.world_to_screen(np.array([right, y]), self.width, self.height)
-            pygame.draw.line(self.screen, self.grid_color, start_pos, end_pos, 1)
-    
+
     def _render_agents(self, world) -> None:
         """
         Render all agents in the world.
@@ -317,10 +280,15 @@ class Renderer:
             world: World object containing agents.
         """
         if not self.camera:
-            print("ERROR: Camera not set in renderer")
+            # Log this only once per session, not every frame
+            if not hasattr(self, '_camera_warning_shown'):
+                print("ERROR: Camera not set in renderer")
+                self._camera_warning_shown = True
             return
         
-        print(f"Rendering {len(world.agents)} agents")
+        # Only log agent count in debug mode
+        if self.debug_mode:
+            print(f"Rendering {len(world.agents)} agents")
         
         # Get screen boundaries in world coordinates
         screen_left = self.camera.position[0] - self.width / (2 * self.camera.zoom)
@@ -355,11 +323,10 @@ class Renderer:
             # Draw agent
             try:
                 pygame.draw.circle(self.screen, color, screen_pos.astype(int), radius)
-                if agents_rendered <= 5:  # Log details for first few agents
-                    print(f"Drew {agent.type} at world pos {agent.position}, screen pos {screen_pos}, color {color}, radius {radius}")
+                # Remove detailed logging for every agent
             except Exception as e:
                 print(f"ERROR drawing agent: {e}, pos: {screen_pos}, type: {agent.type}")
-
+            
             # Debug visualization of separation radius
             if self.debug_mode and self.show_separation:
                 if agent is self.selected_agent or self.show_separation == 2:  # 2 means show for all agents
@@ -404,7 +371,48 @@ class Renderer:
                 
                 pygame.draw.rect(self.screen, energy_color, energy_rect)
         
-        print(f"Total agents rendered: {agents_rendered} out of {len(world.agents)}")
+        # Only log total in debug mode
+        if self.debug_mode:
+            print(f"Total agents rendered: {agents_rendered} out of {len(world.agents)}")
+    
+    def _render_grid(self, world) -> None:
+        """
+        Render the world grid.
+        
+        Args:
+            world: World object containing dimensions.
+        """
+        if not self.camera:
+            return
+        
+        # Grid spacing in world units
+        grid_spacing = 50
+        
+        # Calculate grid boundaries based on screen and camera
+        left = int(self.camera.position[0] - self.width / (2 * self.camera.zoom))
+        right = int(self.camera.position[0] + self.width / (2 * self.camera.zoom))
+        top = int(self.camera.position[1] - self.height / (2 * self.camera.zoom))
+        bottom = int(self.camera.position[1] + self.height / (2 * self.camera.zoom))
+        
+        # Adjust for grid spacing
+        left = (left // grid_spacing) * grid_spacing
+        right = ((right // grid_spacing) + 1) * grid_spacing
+        top = (top // grid_spacing) * grid_spacing
+        bottom = ((bottom // grid_spacing) + 1) * grid_spacing
+        
+        # Draw vertical grid lines
+        for x in range(left, right + 1, grid_spacing):
+            start_pos = self.camera.world_to_screen(np.array([x, top]), self.width, self.height)
+            end_pos = self.camera.world_to_screen(np.array([x, bottom]), self.width, self.height)
+            pygame.draw.line(self.screen, self.grid_color, start_pos, end_pos, 1)
+        
+        # Draw horizontal grid lines
+        for y in range(top, bottom + 1, grid_spacing):
+            start_pos = self.camera.world_to_screen(np.array([left, y]), self.width, self.height)
+            end_pos = self.camera.world_to_screen(np.array([right, y]), self.width, self.height)
+            pygame.draw.line(self.screen, self.grid_color, start_pos, end_pos, 1)
+    
+    
     
     def _render_ui(self, stats: Dict[str, Any]) -> None:
         """

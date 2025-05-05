@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import pygame
 from typing import Dict, Any, List, Tuple, Optional
 import io
+import time
 
 
 class SimulationCharts:
@@ -73,7 +74,11 @@ class SimulationCharts:
         
         # Initial surface
         self.surface = pygame.Surface((width, height))
-    
+        
+        # Chart update tracking
+        self.last_update_time = 0
+        self.update_interval = 0.5  # Update every 0.5 seconds max
+        
     def update(self, stats_history: List[Dict[str, Any]]) -> None:
         """
         Update charts with new statistics.
@@ -84,6 +89,13 @@ class SimulationCharts:
         # If no stats, return empty surface
         if not stats_history:
             return
+        
+        # Rate-limit updates to avoid excessive CPU usage
+        current_time = time.time()
+        if current_time - self.last_update_time < self.update_interval:
+            return
+        
+        self.last_update_time = current_time
         
         # Limit history to max length
         if len(stats_history) > self.max_history:

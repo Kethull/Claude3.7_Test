@@ -113,6 +113,13 @@ class SimulationApp:
         )
         self.world.set_spatial_index(self.spatial_grid)
         
+        # Configure separation parameters
+        self.world.set_separation_params(
+            radius=10.0,     # Default radius
+            strength=0.7,    # Increased from 0.5 to make one-pass separation more effective
+            passes=1         # Reduced from 3 to 1 for better performance
+        )
+        
         # Learning components
         self.is_training = True  # Enable training by default for blank-slate learning
         obs_dim = config["VISION_RAYS"] * 4 + 1  # Distance + type (one-hot: 3) + energy
@@ -155,6 +162,106 @@ class SimulationApp:
         else:
             self.storage = SimulationStorage(replay_file)
             self._setup_replay()
+            
+        # Chart update interval (frames)
+        self.chart_update_interval = 30  # Update charts every 30 frames
+
+    def run_optimized(self) -> None:
+        """
+        Run the optimized main simulation loop.
+        """
+        log(LogLevel.INFO, "\n=== Starting Simulation ===")
+        
+        # Initialize pygame and world
+        if not pygame.get_init():
+            pygame.init()
+        
+        self.initialize_world()
+        
+        # Main loop variables
+        running = True
+        paused = False
+        sim_speed = 1.0
+        render_interval = 0.05  # Render every 50ms (20 FPS target)
+        last_render_time = 0
+        last_chart_update = 0
+        
+        # Main simulation loop
+        while running:
+            current_time = time.time()
+            
+            # Handle events at full speed
+            running, actions = self.renderer.handle_events()
+            
+            # Process actions
+            if "pause_toggle" in actions:
+                paused = actions["pause_toggle"]
+            
+            if "speed" in actions:
+                sim_speed = actions["speed"]
+            
+            if "select" in actions:
+                pos = actions["select"]
+                self.renderer.select_agent_at_position(self.world, pos)
+            
+            if "follow" in actions:
+                self.camera.follow(actions["follow"])
+            
+            # Simulation step (decoupled from rendering)
+            if not paused:
+                # Limit rendering to target FPS, but run simulation at full speed
+                render_now = current_time - last_render_time >= render_interval
+                
+                # Simulation time measurement
+                sim_start_time = time.time()
+                
+                if self.is_replay:
+                    # Replay mode logic (unchanged)
+                    if self.current_replay_index < len(self.replay_timesteps):
+                        timestep = self.replay_timesteps[self.current_replay_index]
+                        self.storage.open('r')
+                        self.storage.load_world_state(self.world, timestep)
+                        stats = self.storage.get_stats(timestep)
+                        self.storage.close()
+                        self.stats = stats if stats else {}
+                        self.current_replay_index += 1
+                    else:
+                        paused = True
+                        log(LogLevel.INFO, "End of replay reached.")
+                else:
+                    # Normal simulation mode - run multiple steps based on speed
+                    steps = max(1, int(sim_speed))
+                    for _ in range(steps):
+                        self._simulation_step()
+                
+                # Track simulation time
+                sim_time = time.time() - sim_start_time
+                self.renderer.set_simulation_time(sim_time)
+                
+                # Render only if enough time has passed since last render
+                if render_now:
+                    # Update charts less frequently to improve performance
+                    update_charts = (self.world.timestep - last_chart_update) >= self.chart_update_interval
+                    
+                    if update_charts:
+                        self.charts.update(self.stats_history)
+                        last_chart_update = self.world.timestep
+                    
+                    # Always render the world
+                    self.renderer.render(self.world, self.stats)
+                    last_render_time = current_time
+                    
+                    # Cap framerate to avoid burning CPU on rendering
+                    elapsed = time.time() - current_time
+                    if elapsed < render_interval:
+                        time.sleep(render_interval - elapsed)
+            else:
+                # When paused, render at a low rate to save CPU
+                time.sleep(0.1)  # 10 FPS when paused
+                self.renderer.render(self.world, self.stats)
+        
+        # Cleanup when done
+        self.cleanup()
     
     def initialize_world(self) -> None:
         """
@@ -215,115 +322,55 @@ class SimulationApp:
         except Exception as e:
             print(f"Error setting up replay: {e}")
             sys.exit(1)
-    
-    # Replace the run method in SimulationApp class
-    def run_optimized(self) -> None:
-        """
-        Run the optimized main simulation loop.
-        """
-        log(LogLevel.INFO, "\n=== Starting Simulation ===")
-        
-        # Initialize pygame and world
-        if not pygame.get_init():
-            pygame.init()
-        
-        self.initialize_world()
-        
-        # Main loop variables
-        running = True
-        paused = False
-        sim_speed = 1.0
-        render_interval = 0.05  # Render every 50ms (20 FPS target)
-        last_render_time = 0
-        
-        # Main simulation loop
-        while running:
-            current_time = time.time()
             
-            # Handle events at full speed
-            running, actions = self.renderer.handle_events()
-            
-            # Process actions
-            if "pause_toggle" in actions:
-                paused = actions["pause_toggle"]
-            
-            if "speed" in actions:
-                sim_speed = actions["speed"]
-            
-            if "select" in actions:
-                pos = actions["select"]
-                self.renderer.select_agent_at_position(self.world, pos)
-            
-            if "follow" in actions:
-                self.camera.follow(actions["follow"])
-            
-            # Simulation step (decoupled from rendering)
-            if not paused:
-                # Limit rendering to target FPS, but run simulation at full speed
-                render_now = current_time - last_render_time >= render_interval
-                
-                # Simulation time measurement
-                sim_start_time = time.time()
-                
-                if self.is_replay:
-                    # Replay mode logic (unchanged)
-                    if self.current_replay_index < len(self.replay_timesteps):
-                        timestep = self.replay_timesteps[self.current_replay_index]
-                        self.storage.open('r')
-                        self.storage.load_world_state(self.world, timestep)
-                        stats = self.storage.get_stats(timestep)
-                        self.storage.close()
-                        self.stats = stats if stats else {}
-                        self.current_replay_index += 1
-                    else:
-                        paused = True
-                        log(LogLevel.INFO, "End of replay reached.")
-                else:
-                    # Normal simulation mode - run multiple steps based on speed
-                    steps = max(1, int(sim_speed))
-                    for _ in range(steps):
-                        self._simulation_step()
-                
-                # Track simulation time
-                sim_time = time.time() - sim_start_time
-                self.renderer.set_simulation_time(sim_time)
-                
-                # Render only if enough time has passed since last render
-                if render_now:
-                    # Update charts and render (moved outside simulation steps)
-                    self.charts.update(self.stats_history)
-                    self.renderer.render(self.world, self.stats)
-                    last_render_time = current_time
-                    
-                    # Cap framerate to avoid burning CPU on rendering
-                    elapsed = time.time() - current_time
-                    if elapsed < render_interval:
-                        time.sleep(render_interval - elapsed)
-            else:
-                # When paused, render at a low rate to save CPU
-                time.sleep(0.1)  # 10 FPS when paused
-                self.renderer.render(self.world, self.stats)
-        
-        # Cleanup when done
-        self.cleanup()
     
     def _simulation_step(self) -> None:
         """
-        Perform a single simulation step.
+        Perform a single simulation step with optimizations.
         """
+        # Add profiling
+        start_time = time.time()
+        
         # Step the world
         self.world.step_optimized()
+        world_step_time = time.time() - start_time
         
-        # Collect experience for RL training
-        if self.is_training:
+        # Get world stats before anything else
+        stats_start_time = time.time()
+        self.stats = self.world.get_stats()
+        stats_time = time.time() - stats_start_time
+        
+        # Exit early if no agents remain
+        prey_count = self.stats.get("prey_count", 0)
+        predator_count = self.stats.get("predator_count", 0)
+        
+        if prey_count == 0 and predator_count == 0:
+            # No agents left, just update stats history and exit
+            self.stats_history.append(self.stats.copy())
+            if len(self.stats_history) > 1000:
+                self.stats_history = self.stats_history[-1000:]
+            
+            # Maybe save state if needed
+            if self.storage_filename and self.world.timestep % self.config["SAVE_INTERVAL"] == 0:
+                self._save_simulation()
+            
+            # Log performance stats every 100 timesteps
+            if self.world.timestep % 100 == 0:
+                print(f"[PROFILE] World step: {world_step_time:.4f}s, Stats: {stats_time:.4f}s")
+                
+            return
+        
+        # Collect experience for RL training only if there are agents
+        rl_start_time = time.time()
+        if self.is_training and (prey_count > 0 or predator_count > 0):
             self._collect_experience()
         
-        # Train policies periodically
-        if self.is_training and self.world.timestep % self.config["TRAIN_INTERVAL"] == 0:
+        # Train policies periodically only if we're training and have agents
+        if self.is_training and (prey_count > 0 or predator_count > 0) and self.world.timestep % self.config["TRAIN_INTERVAL"] == 0:
             self._train_policies()
+        rl_time = time.time() - rl_start_time
         
-        # Update stats
-        self.stats = self.world.get_stats()
+        # Update stats history
         self.stats_history.append(self.stats.copy())
         if len(self.stats_history) > 1000:
             self.stats_history = self.stats_history[-1000:]
@@ -331,6 +378,10 @@ class SimulationApp:
         # Save simulation state periodically
         if self.storage_filename and self.world.timestep % self.config["SAVE_INTERVAL"] == 0:
             self._save_simulation()
+        
+        # Log performance stats every 100 timesteps
+        if self.world.timestep % 100 == 0:
+            print(f"[PROFILE] World step: {world_step_time:.4f}s, Stats: {stats_time:.4f}s, RL: {rl_time:.4f}s")
     
     def _collect_experience(self) -> None:
         """
