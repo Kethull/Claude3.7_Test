@@ -50,6 +50,10 @@ class Renderer:
         else:
             print("Pygame font already initialized in Renderer")
         
+        # Add debug options
+        self.debug_mode = False
+        self.show_separation = False
+        
         # Display settings
         self.width = width
         self.height = height
@@ -108,6 +112,16 @@ class Renderer:
             camera: Camera object for viewport transformations.
         """
         self.camera = camera
+
+    def toggle_debug_mode(self):
+        """Toggle debug visualization mode."""
+        self.debug_mode = not self.debug_mode
+        print(f"Debug mode {'enabled' if self.debug_mode else 'disabled'}")
+
+    def toggle_separation_vis(self):
+        """Toggle visualization of separation radii."""
+        self.show_separation = not self.show_separation
+        print(f"Separation visualization {'enabled' if self.show_separation else 'disabled'}")
     
     def handle_events(self) -> Tuple[bool, Dict[str, Any]]:
         """
@@ -157,6 +171,12 @@ class Renderer:
                     # Toggle follow selected agent
                     if self.selected_agent and self.camera:
                         actions["follow"] = self.selected_agent
+                elif event.key == pygame.K_d:
+                    # Toggle debug mode
+                    self.toggle_debug_mode()
+                elif event.key == pygame.K_v:
+                    # Toggle separation visualization
+                    self.toggle_separation_vis()
             
             # Mouse events
             elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -339,6 +359,11 @@ class Renderer:
                     print(f"Drew {agent.type} at world pos {agent.position}, screen pos {screen_pos}, color {color}, radius {radius}")
             except Exception as e:
                 print(f"ERROR drawing agent: {e}, pos: {screen_pos}, type: {agent.type}")
+
+            # Debug visualization of separation radius
+            if self.debug_mode and self.show_separation:
+                if agent is self.selected_agent or self.show_separation == 2:  # 2 means show for all agents
+                    self._render_separation_radius(world, agent)
             
             # Highlight selected agent
             if agent == self.selected_agent:
@@ -484,7 +509,9 @@ class Renderer:
             "Right Click + Drag - Pan Camera",
             "Mouse Wheel - Zoom In/Out",
             "C - Clear Selection",
-            "F - Follow Selected Agent"
+            "F - Follow Selected Agent",
+            "D - Toggle Debug Mode",
+            "V - Toggle Separation Visualization"
         ]
         
         line_height = 24
@@ -555,6 +582,49 @@ class Renderer:
             time_taken (float): Time taken for simulation step.
         """
         self.sim_time = time_taken
+
+    """
+    Add a method to visualize separation radius for debugging.
+    This should be added to the Renderer class in renderer.py
+    """
+    def _render_separation_radius(self, world, agent):
+        """
+        Render the separation radius for the selected agent (debug feature).
+        
+        Args:
+            world: World object containing data.
+            agent: The agent whose separation radius to visualize.
+        """
+        if not world or not agent or not self.camera:
+            return
+        
+        # Get separation radius from world
+        radius = world.separation_radius
+        
+        # Convert to screen coordinates
+        screen_pos = self.camera.world_to_screen(agent.position, self.width, self.height)
+        
+        # Apply zoom scaling to radius
+        screen_radius = int(radius * self.camera.zoom)
+        
+        # Draw the separation radius as a transparent circle
+        circle_surface = pygame.Surface((screen_radius * 2, screen_radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(
+            circle_surface, 
+            (255, 255, 255, 30),  # White with alpha
+            (screen_radius, screen_radius), 
+            screen_radius
+        )
+        self.screen.blit(circle_surface, (screen_pos[0] - screen_radius, screen_pos[1] - screen_radius))
+        
+        # Also draw a thin circle outline
+        pygame.draw.circle(
+            self.screen, 
+            (255, 255, 255, 100),  # White with higher alpha
+            screen_pos.astype(int),
+            screen_radius,
+            1  # Line width
+        )
     
     def cleanup(self) -> None:
         """

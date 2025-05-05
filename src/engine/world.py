@@ -24,6 +24,21 @@ class World:
         spatial_index: Spatial partitioning structure (optional).
     """
     
+    def set_separation_params(self, radius: float = 10.0, strength: float = 0.5, passes: int = 3) -> None:
+        """
+        Set parameters for agent separation behavior.
+        
+        Args:
+            radius (float): Distance within which separation forces apply.
+            strength (float): Strength of the separation force (0.0-1.0 recommended).
+            passes (int): Number of separation passes per step (more passes = stronger separation).
+        """
+        self.separation_radius = radius
+        self.separation_strength = strength
+        self.separation_passes = passes
+        
+        print(f"Set separation parameters: radius={radius}, strength={strength}, passes={passes}")
+    
     def __init__(self, width: int, height: int):
         """
         Initialize the world with given dimensions.
@@ -34,9 +49,14 @@ class World:
         """
         self.width = width
         self.height = height
-        self.agents: List[Agent] = []
+        self.agents = []
         self.timestep = 0
         self.spatial_index = None  # Will be initialized if needed
+        
+        # Separation parameters (default values)
+        self.separation_radius = 10.0
+        self.separation_strength = 0.5
+        self.separation_passes = 3
     
     def add_agent(self, agent: Agent) -> None:
         """
@@ -194,15 +214,20 @@ class World:
         
         return list(set(cells))  # Remove duplicates
     
+    """
+    Modified step_optimized method to include separation logic.
+    This should replace the existing step_optimized method in the World class in world.py
+    """
     def step_optimized(self) -> None:
         """
-        Optimized version of the world step function.
+        Optimized version of the world step function with separation logic.
         
         This batches operations and improves performance:
         1. Gather all actions first
         2. Apply movements in batch
-        3. Handle interactions in batch
-        4. Handle reproduction at the end
+        3. Apply separation forces to prevent overlapping
+        4. Handle interactions in batch
+        5. Handle reproduction at the end
         """
         self.timestep += 1
         
@@ -228,7 +253,7 @@ class World:
         # STEP 2: Process all movements first
         for agent, (action, observation) in agent_actions.items():
             self._move_agent(agent, action)
-            
+        
         # STEP 3: Update spatial index with all new positions at once
         if self.spatial_index is not None:
             # Completely rebuild spatial index (faster than many individual updates)
@@ -237,7 +262,21 @@ class World:
                 if agent.alive:
                     self.spatial_index.insert(agent)
         
-        # STEP 4: Process all predator-prey interactions
+        # STEP 4: Apply separation forces to prevent overlapping
+        # Multiple passes for better results
+        for _ in range(self.separation_passes):
+            for agent in self.agents:
+                if not agent.alive:
+                    continue
+                
+                # Apply separation forces
+                self.apply_separation(
+                    agent, 
+                    separation_radius=self.separation_radius,
+                    separation_strength=self.separation_strength
+                )
+        
+        # STEP 5: Process all predator-prey interactions
         predator_agents = [a for a in self.agents if a.alive and a.type == "predator"]
         prey_agents = {a: True for a in self.agents if a.alive and a.type == "prey"}
         
@@ -258,29 +297,29 @@ class World:
                     prey_agents[prey] = False  # Mark as eaten
                     break  # Only eat one prey per step
         
-            # STEP 5: Process reproduction and agent updates
-            for agent, (action, observation) in agent_actions.items():
-                if not agent.alive:
-                    continue
-                    
-                # Add last action to observation for energy updates
-                observation["last_action"] = action
-                    
-                # Update agent internal state
-                agent.update(observation)
+        # STEP 6: Process reproduction and agent updates
+        for agent, (action, observation) in agent_actions.items():
+            if not agent.alive:
+                continue
                 
-                # Try reproduction
-                offspring = agent.try_reproduce()
-                if offspring:
-                    offspring.position = self.wrap_position(offspring.position)
-                    new_agents.append(offspring)
+            # Add last action to observation for energy updates
+            observation["last_action"] = action
+                
+            # Update agent internal state
+            agent.update(observation)
             
-            # STEP 6: Remove eaten prey
-            self.agents = [agent for agent in self.agents if agent.alive]
-            
-            # STEP 7: Add new agents from reproduction
-            for offspring in new_agents:
-                self.add_agent(offspring)
+            # Try reproduction
+            offspring = agent.try_reproduce()
+            if offspring:
+                offspring.position = self.wrap_position(offspring.position)
+                new_agents.append(offspring)
+        
+        # STEP 7: Remove eaten prey
+        self.agents = [agent for agent in self.agents if agent.alive]
+        
+        # STEP 8: Add new agents from reproduction
+        for offspring in new_agents:
+            self.add_agent(offspring)
     
     def _move_agent(self, agent: Agent, action: int) -> None:
         """
@@ -404,3 +443,55 @@ class World:
             "avg_predator_energy": np.mean([a.energy for a in self.agents if a.type == "predator"]) if any(a.type == "predator" for a in self.agents) else 0,
         }
         return stats
+    
+    """
+    Add separation logic to the World class.
+    This should be added to the World class in world.py
+    """
+    """
+    Updated apply_separation method to properly utilize the separation parameters.
+    This should replace the apply_separation method we created earlier.
+    """
+    def apply_separation(self, agent, separation_radius=None, separation_strength=None):
+        """
+        Apply separation forces to keep agents from overlapping.
+        
+        Args:
+            agent (Agent): Agent to apply separation to.
+            separation_radius (float, optional): Radius within which separation forces apply.
+            separation_strength (float, optional): Strength of the separation force.
+            
+        Returns:
+            np.ndarray: New position after applying separation.
+        """
+        # Use instance parameters if not specified
+        if separation_radius is None:
+            separation_radius = self.separation_radius
+        
+        if separation_strength is None:
+            separation_strength = self.separation_strength
+        
+        # Get nearby agents using spatial index if available
+        nearby_agents = self._get_nearby_agents(agent, separation_radius)
+        
+        # Calculate separation force
+        separation_force = agent.calculate_separation_force(
+            nearby_agents, self, separation_radius, separation_strength
+        )
+        
+        # Apply the force to the agent's position
+        if np.any(separation_force):
+            # Store old position for spatial index update
+            old_position = agent.position.copy()
+            
+            # Apply separation force
+            agent.position += separation_force
+            
+            # Wrap around world boundaries
+            agent.position = self.wrap_position(agent.position)
+            
+            # Update spatial index if needed
+            if self.spatial_index is not None:
+                self.spatial_index.update(agent, old_position)
+                
+        return agent.position

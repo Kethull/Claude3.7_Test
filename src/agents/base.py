@@ -135,3 +135,61 @@ class Agent:
         """
         # Default color (gray)
         return (128, 128, 128)
+    
+    """
+    Add separation logic to the base Agent class.
+    This should be added to the Agent class in base.py
+    """
+    def calculate_separation_force(self, nearby_agents, world, separation_radius=10.0, separation_strength=1.0):
+        """
+        Calculate separation force to avoid overlapping with other agents.
+        
+        Args:
+            nearby_agents (List[Agent]): List of nearby agents.
+            world: The simulation world (for wraparound calculations).
+            separation_radius (float): Radius within which separation applies.
+            separation_strength (float): Strength of the separation force.
+            
+        Returns:
+            np.ndarray: Separation force vector.
+        """
+        if not nearby_agents:
+            return np.zeros(2)
+        
+        separation_force = np.zeros(2)
+        
+        for other in nearby_agents:
+            if other is self:
+                continue
+            
+            # Calculate displacement vector with wraparound
+            dx = self.position[0] - other.position[0]
+            dy = self.position[1] - other.position[1]
+            
+            # Handle wraparound for distance calculation
+            if abs(dx) > world.width / 2:
+                dx = dx - np.sign(dx) * world.width
+            if abs(dy) > world.height / 2:
+                dy = dy - np.sign(dy) * world.height
+                
+            # Calculate distance
+            distance = np.sqrt(dx*dx + dy*dy)
+            
+            # Apply separation force if too close
+            if 0 < distance < separation_radius:
+                # Get normalized direction vector away from other agent
+                # Strength increases as agents get closer
+                repulsion = (separation_radius - distance) / separation_radius
+                
+                # Normalize the displacement vector
+                norm = np.sqrt(dx*dx + dy*dy)
+                if norm > 0:
+                    separation_force[0] += (dx / norm) * repulsion
+                    separation_force[1] += (dy / norm) * repulsion
+        
+        # Normalize the separation force if it's not zero
+        norm = np.linalg.norm(separation_force)
+        if norm > 0:
+            separation_force = separation_force / norm * separation_strength
+            
+        return separation_force
