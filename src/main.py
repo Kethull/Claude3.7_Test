@@ -30,9 +30,9 @@ from utils.storage import SimulationStorage
 
 # Default simulation parameters
 DEFAULT_CONFIG = {
-    "WORLD_WIDTH": 500,
-    "WORLD_HEIGHT": 500,
-    "VISION_RAYS": 8,
+    "WORLD_WIDTH": 1900,
+    "WORLD_HEIGHT": 900,
+    "VISION_RAYS": 4,
     "VISION_RANGE": 100,
     "INITIAL_PREY": 50,
     "INITIAL_PREDATORS": 50,
@@ -44,9 +44,9 @@ DEFAULT_CONFIG = {
     "TRAIN_INTERVAL": 1000,  # Timesteps between training
     "SAVE_INTERVAL": 5000,   # Timesteps between saving
     "REPLAY_INTERVAL": 1,    # Timesteps between replay saves
-    "DISPLAY_WIDTH": 1280,
-    "DISPLAY_HEIGHT": 720,
-    "SPATIAL_CELL_SIZE": 50  # Cell size for spatial partitioning
+    "DISPLAY_WIDTH": 1900,
+    "DISPLAY_HEIGHT": 900,
+    "SPATIAL_CELL_SIZE": 15  # Cell size for spatial partitioning
 }
 
 # Add this to main.py
