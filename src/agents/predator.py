@@ -49,9 +49,9 @@ class Predator(Agent):
         
         # No policy yet, use random actions with a unique seed for each agent
         # Use a hash of the agent's id modulo 2^32-1 to stay within valid range
-        seed = (hash(self.id) + observation["timestamp"]) % (2**32 - 1)
-        rng = np.random.RandomState(seed)  # Create a separate random number generator
-        return rng.randint(0, 5)  # Use the agent-specific RNG
+        # seed = (hash(self.id) + observation["timestamp"]) % (2**32 - 1)
+        # rng = np.random.RandomState(seed)  # Create a separate random number generator
+        # return rng.randint(0, 5)  # Use the agent-specific RNG
     
     def _prepare_observation(self, observation: Dict[str, Any]) -> np.ndarray:
         """

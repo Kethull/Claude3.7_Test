@@ -41,12 +41,12 @@ DEFAULT_CONFIG = {
     "LEARNING_RATE": 3e-4,
     "GAMMA": 0.99,
     "BATCH_SIZE": 128,
-    "TRAIN_INTERVAL": 10,  # Timesteps between training
+    "TRAIN_INTERVAL": 1,  # Timesteps between training
     "SAVE_INTERVAL": 5000,   # Timesteps between saving
     "REPLAY_INTERVAL": 1,    # Timesteps between replay saves
     "DISPLAY_WIDTH": 1900,
     "DISPLAY_HEIGHT": 900,
-    "SPATIAL_CELL_SIZE": 30  # Cell size for spatial partitioning
+    "SPATIAL_CELL_SIZE": 15  # Cell size for spatial partitioning
 }
 
 # Add this to main.py
