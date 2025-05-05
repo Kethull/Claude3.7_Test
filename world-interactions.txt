@@ -1,0 +1,35 @@
+    def _handle_interactions(self, agent: Agent) -> None:
+        """
+        Handle interactions between agents, such as predators eating prey.
+        
+        Args:
+            agent (Agent): The agent to process interactions for.
+        """
+        # Skip if the agent isn't a predator
+        if agent.type != "predator":
+            return
+        
+        # Find nearby agents
+        nearby_agents = self._get_nearby_agents(agent, 5.0)
+        
+        # Check for prey to eat
+        for other in nearby_agents:
+            if other.type == "prey" and other.alive:
+                # Predator eats prey
+                energy_gain = min(other.energy, 50)  # Cap energy gain
+                agent.energy += energy_gain
+                
+                # Add RL reward for successful hunt
+                # This is stored in the agent for the RL system to collect
+                if hasattr(agent, 'last_reward'):
+                    agent.last_reward = 2.0  # Significant positive reward for hunting
+                
+                # Mark prey as dead and remove
+                other.alive = False
+                self.remove_agent(other)
+                
+                # Add negative reward to prey (will be collected if using episodic RL)
+                if hasattr(other, 'last_reward'):
+                    other.last_reward = -1.0  # Negative reward for being eaten
+                
+                break  # Only eat one prey per step

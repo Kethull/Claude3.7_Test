@@ -1,0 +1,60 @@
+    def act(self, observation: Dict[str, Any]) -> int:
+        """
+        Decide on an action based on the current observation.
+        
+        Uses reinforcement learning policy if available, or random actions if not.
+        No predefined behaviors - all strategies must be learned through RL.
+        
+        Args:
+            observation (Dict[str, Any]): Observation of the environment.
+            
+        Returns:
+            int: Action index (0: stay, 1: up, 2: down, 3: right, 4: left)
+        """
+        # If we have a policy, use it
+        if self.policy is not None:
+            # Convert observation to tensor format expected by policy
+            obs_tensor = self._prepare_observation(observation)
+            action = self.policy.get_deterministic_action(obs_tensor).item()
+            return action
+        
+        # No policy yet, use completely random actions
+        return np.random.randint(0, 5)
+    
+    def _prepare_observation(self, observation: Dict[str, Any]) -> np.ndarray:
+        """
+        Convert the observation dictionary to a flat vector for the policy.
+        
+        Args:
+            observation (Dict[str, Any]): Raw observation.
+            
+        Returns:
+            np.ndarray: Flat observation vector.
+        """
+        # Extract values from observation
+        vision = observation["vision"]
+        energy = observation["energy"]
+        
+        # Flatten vision rays
+        vision_flat = []
+        for ray in vision:
+            # Normalize distance (0-1 range)
+            norm_distance = ray["distance"] / 100.0  # Assuming max range of 100
+            vision_flat.append(norm_distance)
+            
+            # One-hot encoding of type (none, prey, predator)
+            if ray["type"] == "none":
+                vision_flat.extend([1, 0, 0])
+            elif ray["type"] == "prey":
+                vision_flat.extend([0, 1, 0])
+            elif ray["type"] == "predator":
+                vision_flat.extend([0, 0, 1])
+            else:
+                vision_flat.extend([0, 0, 0])
+        
+        # Normalize energy (0-1 range)
+        norm_energy = energy / 300.0  # Assuming max energy of 300
+        
+        # Combine all features
+        obs_vector = np.array(vision_flat + [norm_energy], dtype=np.float32)
+        return obs_vector
