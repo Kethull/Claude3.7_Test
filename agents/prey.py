@@ -1,3 +1,44 @@
+"""
+Prey agent module for the predator-prey simulation.
+
+This module defines the Prey agent class, which gets energy by staying still
+and runs from predators.
+"""
+import numpy as np
+from typing import Dict, Any, Tuple, Optional
+from agents.base import Agent
+
+
+class Prey(Agent):
+    """
+    Prey agent that gains energy by staying still and tries to avoid predators.
+    
+    Attributes:
+        energy_gain_rate (float): Energy gained per timestep when staying still.
+    """
+    
+    def __init__(self, position: np.ndarray, energy: float = 100.0):
+        """
+        Initialize a prey agent.
+        
+        Args:
+            position (np.ndarray): Initial position.
+            energy (float): Initial energy level.
+        """
+        super().__init__(position, energy)
+        self.type = "prey"
+        
+        # Prey-specific attributes
+        self.energy_gain_rate = 1.0  # Energy gained per timestep when staying still
+        self.reproduction_threshold = 120.0  # Energy needed to reproduce
+        self.reproduction_cost = 50.0  # Energy lost during reproduction
+        self.reproduction_cooldown = 20  # Timesteps between reproduction attempts
+        
+        # Movement cost is defined in the World.move_agent method
+        
+        # Policy network (will be set by controller)
+        self.policy = None
+    
     def act(self, observation: Dict[str, Any]) -> int:
         """
         Decide on an action based on the current observation.
@@ -58,3 +99,31 @@
         # Combine all features
         obs_vector = np.array(vision_flat + [norm_energy], dtype=np.float32)
         return obs_vector
+    
+    def update(self, observation: Dict[str, Any]) -> None:
+        """
+        Update agent state after action.
+        
+        For prey, gain energy if staying still.
+        
+        Args:
+            observation (Dict[str, Any]): Current observation.
+        """
+        super().update(observation)
+        
+        # Gain energy if staying still (action 0)
+        last_action = observation.get("last_action", None)
+        if last_action == 0:  # Stay action
+            self.add_energy(self.energy_gain_rate)
+    
+    def get_color(self) -> Tuple[int, int, int]:
+        """
+        Get the color for rendering this prey agent.
+        
+        Returns:
+            Tuple[int, int, int]: RGB color values.
+        """
+        # Green color for prey, intensity based on energy level
+        energy_ratio = min(1.0, self.energy / 150.0)
+        green = int(100 + energy_ratio * 155)
+        return (0, green, 0)

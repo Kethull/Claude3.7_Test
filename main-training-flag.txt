@@ -1,4 +1,0 @@
-        # Learning components
-        self.is_training = True  # Enable training by default for blank-slate learning
-        obs_dim = config["VISION_RAYS"] * 4 + 1  # Distance + type (one-hot: 3) + energy
-        action_dim = 5  # stay, up, down, right, left

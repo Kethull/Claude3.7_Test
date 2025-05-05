@@ -99,46 +99,42 @@ class Predator(Agent):
         obs_vector = np.array(vision_flat + [norm_energy], dtype=np.float32)
         return obs_vector
     
-    def _heuristic_action(self, observation: Dict[str, Any]) -> int:
+    def _handle_interactions(self, agent: Agent) -> None:
         """
-        Simple heuristic policy for predator behavior.
+        Handle interactions between agents, such as predators eating prey.
         
         Args:
-            observation (Dict[str, Any]): Observation of the environment.
-            
-        Returns:
-            int: Action index.
+            agent (Agent): The agent to process interactions for.
         """
-        # Check for nearby prey
-        vision = observation["vision"]
-        prey_detected = False
-        prey_direction = np.zeros(2)
+        # Skip if the agent isn't a predator
+        if agent.type != "predator":
+            return
         
-        for i, ray in enumerate(vision):
-            if ray["type"] == "prey" and ray["distance"] < 50:
-                prey_detected = True
-                angle = 2 * np.pi * i / len(vision)
-                direction = np.array([np.cos(angle), np.sin(angle)])
-                # Closer prey have more influence
-                weight = (50 - ray["distance"]) / 50
-                prey_direction += direction * weight
+        # Find nearby agents
+        nearby_agents = self._get_nearby_agents(agent, 5.0)
         
-        if prey_detected:
-            # Move toward prey
-            if np.linalg.norm(prey_direction) > 0:
-                hunt_direction = prey_direction / np.linalg.norm(prey_direction)
+        # Check for prey to eat
+        for other in nearby_agents:
+            if other.type == "prey" and other.alive:
+                # Predator eats prey
+                energy_gain = min(other.energy, 50)  # Cap energy gain
+                agent.energy += energy_gain
                 
-                # Map direction to action
-                if abs(hunt_direction[0]) > abs(hunt_direction[1]):
-                    # Horizontal movement
-                    return 3 if hunt_direction[0] > 0 else 4  # Right or Left
-                else:
-                    # Vertical movement
-                    return 2 if hunt_direction[1] > 0 else 1  # Down or Up
-        
-        # No prey nearby, random exploration
-        return np.random.randint(1, 5)  # Avoid staying still
-    
+                # Add RL reward for successful hunt
+                # This is stored in the agent for the RL system to collect
+                if hasattr(agent, 'last_reward'):
+                    agent.last_reward = 2.0  # Significant positive reward for hunting
+                
+                # Mark prey as dead and remove
+                other.alive = False
+                self.remove_agent(other)
+                
+                # Add negative reward to prey (will be collected if using episodic RL)
+                if hasattr(other, 'last_reward'):
+                    other.last_reward = -1.0  # Negative reward for being eaten
+                
+                break  # Only eat one prey per step
+
     def update(self, observation: Dict[str, Any]) -> None:
         """
         Update agent state after action.

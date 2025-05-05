@@ -46,6 +46,13 @@ class Agent:
         self.initial_energy = 100.0
         self.reproduction_cooldown = 10
         self.last_reproduction = 0
+        
+        # RL-related attributes
+        self.policy = None
+        self.last_observation = None
+        self.last_action = None
+        self.last_reward = 0.0
+        self.cumulative_reward = 0.0
     
     def apply_energy_cost(self, cost: float) -> None:
         """

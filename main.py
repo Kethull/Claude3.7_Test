@@ -99,7 +99,7 @@ class SimulationApp:
         self.world.set_spatial_index(self.spatial_grid)
         
         # Learning components
-        self.is_training = False
+        self.is_training = True  # Enable training by default for blank-slate learning
         obs_dim = config["VISION_RAYS"] * 4 + 1  # Distance + type (one-hot: 3) + energy
         action_dim = 5  # stay, up, down, right, left
         
@@ -296,22 +296,90 @@ class SimulationApp:
         """
         Collect experience from agents for reinforcement learning.
         """
-        # For each prey agent
+        # For each agent
         for agent in self.world.agents:
             if not agent.alive:
                 continue
-                
-            if agent.type == "prey":
-                # Get observation and action
-                observation = self.world.get_observation(agent)
-                obs_vector = agent._prepare_observation(observation)
-                
-                # TODO: Store in buffer with reward calculation
-                # This would be expanded in a full implementation
             
-            elif agent.type == "predator":
-                # Similar for predators
-                pass
+            # Get observation and convert to tensor format
+            observation = self.world.get_observation(agent)
+            obs_vector = agent._prepare_observation(observation)
+            
+            # Determine action using current policy
+            if agent.type == "prey" and agent.policy is not None:
+                # Get prey action and value
+                action_tensor = torch.tensor(obs_vector, dtype=torch.float32).unsqueeze(0)
+                action, log_prob, value = agent.policy.get_action_and_value(action_tensor)
+                
+                # Execute action (happens in world.step())
+                # Store action for reward calculation in next step
+                observation["last_action"] = action.item()
+                
+                # Calculate reward
+                reward = 0.0
+                
+                # Base survival reward
+                reward += 0.1  # Small positive reward for staying alive
+                
+                # Energy-based reward components
+                if agent.energy > agent.reproduction_threshold:
+                    reward += 1.0  # Bonus for reaching reproduction threshold
+                
+                # Energy gain reward (if staying still)
+                if observation.get("last_action", None) == 0:  # Stay action
+                    reward += 0.2  # Reward for energy-positive behavior
+                
+                # Store experience in buffer
+                # We'll need next observation when agent acts again next time, so this is partial
+                self.prey_buffer.add(
+                    obs_vector,
+                    action.item(),
+                    reward,
+                    obs_vector.copy(),  # Will be updated with next step
+                    False,  # Will be set properly in next step
+                    log_prob.item(),
+                    value.item()
+                )
+                
+            elif agent.type == "predator" and agent.policy is not None:
+                # Get predator action and value
+                action_tensor = torch.tensor(obs_vector, dtype=torch.float32).unsqueeze(0)
+                action, log_prob, value = agent.policy.get_action_and_value(action_tensor)
+                
+                # Store action for reward calculation in next step
+                observation["last_action"] = action.item()
+                
+                # Calculate reward
+                reward = 0.0
+                
+                # Base survival reward
+                reward += 0.05  # Smaller base reward than prey
+                
+                # Energy-based reward
+                if agent.energy > agent.reproduction_threshold:
+                    reward += 1.5  # Larger bonus than prey for reproduction threshold
+                
+                # Hunt reward (handled in world step when eating prey)
+                # We'll add +2.0 reward for successful hunts in the world._handle_interactions method
+                
+                # Exploration penalty for staying still
+                if observation.get("last_action", None) == 0:  # Stay action
+                    reward -= 0.1  # Small penalty for not hunting
+                
+                # Store experience in buffer
+                self.predator_buffer.add(
+                    obs_vector,
+                    action.item(),
+                    reward,
+                    obs_vector.copy(),  # Will be updated with next step
+                    False,  # Will be set properly in next step
+                    log_prob.item(),
+                    value.item()
+                )
+                
+        # Update experience records for agents that died or performed actions in previous steps
+        # This would track completed experiences with actual next states and done flags
+        # Implementation would require tracking agent IDs and previous observations
     
     def _train_policies(self) -> None:
         """
