@@ -40,18 +40,6 @@ class Prey(Agent):
         self.policy = None
     
     def act(self, observation: Dict[str, Any]) -> int:
-        """
-        Decide on an action based on the current observation.
-        
-        Uses reinforcement learning policy if available, or random actions if not.
-        No predefined behaviors - all strategies must be learned through RL.
-        
-        Args:
-            observation (Dict[str, Any]): Observation of the environment.
-            
-        Returns:
-            int: Action index (0: stay, 1: up, 2: down, 3: right, 4: left)
-        """
         # If we have a policy, use it
         if self.policy is not None:
             # Convert observation to tensor format expected by policy
@@ -59,7 +47,10 @@ class Prey(Agent):
             action = self.policy.get_deterministic_action(obs_tensor).item()
             return action
         
-        # No policy yet, use completely random actions
+        # No policy yet, use position-influenced random actions
+        # Use agent id and position to seed the random choice
+        seed = hash(self.id) + int(self.position[0] * 100) + int(self.position[1] * 100) + observation["timestamp"]
+        np.random.seed(seed)
         return np.random.randint(0, 5)
     
     def _prepare_observation(self, observation: Dict[str, Any]) -> np.ndarray:
