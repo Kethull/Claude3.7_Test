@@ -17,7 +17,7 @@ import datetime
 # Import local modules
 from engine.world import World
 from engine.camera import Camera
-from engine.spatial import SpatialGrid, QuadTree
+from engine.spatial import OptimizedSpatialGrid
 from agents.prey import Prey
 from agents.predator import Predator
 from rl.policy import PPOPolicy
@@ -106,7 +106,7 @@ class SimulationApp:
         
         # Set up spatial partitioning
         cell_size = config["SPATIAL_CELL_SIZE"]
-        self.spatial_grid = SpatialGrid(
+        self.spatial_grid = OptimizedSpatialGrid(
             config["WORLD_WIDTH"], 
             config["WORLD_HEIGHT"],
             cell_size
