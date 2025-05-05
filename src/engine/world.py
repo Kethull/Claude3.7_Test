@@ -102,115 +102,185 @@ class World:
         
         return observation
     
-    def _get_vision_rays(self, agent: Agent, num_rays: int = 8, 
-                       vision_range: float = 100.0) -> List[Dict[str, Any]]:
-        """
-        Generate vision rays for an agent.
-        
-        Args:
-            agent (Agent): The agent to generate vision rays for.
-            num_rays (int): Number of rays to cast.
-            vision_range (float): Maximum distance of vision.
-            
-        Returns:
-            List[Dict[str, Any]]: List of vision ray results.
-        """
-        rays = []
-        
-        # Cast rays in different directions
-        for i in range(num_rays):
-            angle = 2 * np.pi * i / num_rays
-            direction = np.array([np.cos(angle), np.sin(angle)])
-            
-            # Find the closest agent in this direction
-            closest_agent = None
-            closest_distance = vision_range
-            
-            for other in self.agents:
-                if other is agent:
-                    continue
-                
-                # Calculate vector to other agent
-                to_other = other.position - agent.position
-                
-                # Handle wraparound for distance calculation
-                to_other[0] = (to_other[0] + self.width / 2) % self.width - self.width / 2
-                to_other[1] = (to_other[1] + self.height / 2) % self.height - self.height / 2
-                
-                # Project onto ray direction
-                projection = np.dot(to_other, direction)
-                
-                if projection <= 0:  # Behind the agent
-                    continue
-                
-                # Calculate perpendicular distance to ray
-                perp_dist = np.linalg.norm(to_other - projection * direction)
-                
-                # If within the ray's width and closer than current closest
-                if perp_dist < 5.0 and projection < closest_distance:
-                    closest_agent = other
-                    closest_distance = projection
-            
-            # Record the ray result
-            ray_result = {
-                "distance": closest_distance if closest_agent else vision_range,
-                "type": closest_agent.type if closest_agent else "none"
-            }
-            rays.append(ray_result)
-        
-        return rays
+    # Optimized vision ray calculation
+def _get_vision_rays_optimized(self, agent: Agent, num_rays: int = 4, 
+                     vision_range: float = 100.0) -> List[Dict[str, Any]]:
+    """Optimized vision ray calculation using spatial partitioning."""
+    rays = []
     
-    def step(self) -> None:
-        """
-        Advance the simulation by one timestep.
+    # Use fewer rays (reduce from 8 to 4)
+    for i in range(num_rays):
+        angle = 2 * np.pi * i / num_rays
+        direction = np.array([np.cos(angle), np.sin(angle)])
         
-        This function:
-        1. Gets observations for each agent
-        2. Has agents decide on actions
-        3. Updates agent positions and energy
-        4. Handles interactions (eating, reproduction)
-        5. Removes dead agents
+        # Find the closest agent in this direction using spatial index
+        closest_agent = None
+        closest_distance = vision_range
+        
+        # Compute ray endpoint
+        ray_end = agent.position + direction * vision_range
+        
+        # Get candidates from spatial index (much faster than checking all agents)
+        if self.spatial_index is not None:
+            # Create a search box along the ray
+            search_width = 10.0  # Width of search box
+            perpendicular = np.array([-direction[1], direction[0]]) * search_width/2
+            
+            # Check cells that intersect with this ray path
+            cells_to_check = self._get_cells_along_ray(agent.position, ray_end, search_width)
+            candidates = []
+            for cell in cells_to_check:
+                row, col = cell
+                if 0 <= row < self.spatial_index.rows and 0 <= col < self.spatial_index.cols:
+                    candidates.extend(self.spatial_index.grid[row][col])
+        else:
+            candidates = self.agents
+        
+        # Process only agent candidates from spatial index
+        for other in candidates:
+            if other is agent:
+                continue
+            
+            # Calculate vector to other agent
+            to_other = other.position - agent.position
+            
+            # Handle wraparound for distance calculation
+            to_other[0] = (to_other[0] + self.width / 2) % self.width - self.width / 2
+            to_other[1] = (to_other[1] + self.height / 2) % self.height - self.height / 2
+            
+            # Project onto ray direction
+            projection = np.dot(to_other, direction)
+            
+            if projection <= 0:  # Behind the agent
+                continue
+            
+            # Calculate perpendicular distance to ray
+            perp_dist = np.linalg.norm(to_other - projection * direction)
+            
+            # If within the ray's width and closer than current closest
+            if perp_dist < 5.0 and projection < closest_distance:
+                closest_agent = other
+                closest_distance = projection
+        
+        # Record the ray result
+        ray_result = {
+            "distance": closest_distance if closest_agent else vision_range,
+            "type": closest_agent.type if closest_agent else "none"
+        }
+        rays.append(ray_result)
+    
+        return rays
+
+    def _get_cells_along_ray(self, start, end, width):
+        """Get the grid cells that a ray passes through."""
+        cells = []
+        direction = end - start
+        length = np.linalg.norm(direction)
+        if length == 0:
+            return []
+        
+        direction = direction / length
+        perpendicular = np.array([-direction[1], direction[0]])
+        
+        # Sample points along the ray
+        num_samples = max(10, int(length / (self.spatial_index.cell_size/2)))
+        for i in range(num_samples):
+            t = i / num_samples
+            center = start + direction * length * t
+            
+            # Get the cell for this point
+            col, row = self.spatial_index.get_cell_indices(center)
+            cells.append((row, col))
+        
+        return list(set(cells))  # Remove duplicates
+    
+    def step_optimized(self) -> None:
+        """
+        Optimized version of the world step function.
+        
+        This batches operations and improves performance:
+        1. Gather all actions first
+        2. Apply movements in batch
+        3. Handle interactions in batch
+        4. Handle reproduction at the end
         """
         self.timestep += 1
         
         # For tracking new agents from reproduction
         new_agents = []
         
-        # Process each agent
-        for agent in list(self.agents):  # Make a copy for safe iteration
+        # STEP 1: Gather all observations and actions first
+        agent_actions = {}
+        old_positions = {}
+        
+        for agent in self.agents:
             if not agent.alive:
-                self.remove_agent(agent)
                 continue
-            
+                
             # Get observation and decide action
             observation = self.get_observation(agent)
             action = agent.act(observation)
             
-            # Save old position for spatial index update
-            old_position = agent.position.copy()
-            
-            # Update position based on action
+            # Save for batch processing
+            agent_actions[agent] = (action, observation)
+            old_positions[agent] = agent.position.copy()
+        
+        # STEP 2: Process all movements first
+        for agent, (action, observation) in agent_actions.items():
             self._move_agent(agent, action)
             
-            # Update spatial index if needed
-            if self.spatial_index is not None:
-                self.spatial_index.update(agent, old_position)
-            
-            # Handle interactions with other agents
-            self._handle_interactions(agent)
-            
-            # Handle reproduction
-            offspring = agent.try_reproduce()
-            if offspring:
-                offspring.position = self.wrap_position(offspring.position)
-                new_agents.append(offspring)
+        # STEP 3: Update spatial index with all new positions at once
+        if self.spatial_index is not None:
+            # Completely rebuild spatial index (faster than many individual updates)
+            self.spatial_index.clear()
+            for agent in self.agents:
+                if agent.alive:
+                    self.spatial_index.insert(agent)
         
-        # Add new agents from reproduction
-        for offspring in new_agents:
-            self.add_agent(offspring)
+        # STEP 4: Process all predator-prey interactions
+        predator_agents = [a for a in self.agents if a.alive and a.type == "predator"]
+        prey_agents = {a: True for a in self.agents if a.alive and a.type == "prey"}
         
-        # Remove dead agents again to catch any that died during interactions
-        self.agents = [agent for agent in self.agents if agent.alive]
+        for predator in predator_agents:
+            if not predator.alive:  # Skip if killed by another predator
+                continue
+                
+            # Find nearby agents more efficiently with spatial index
+            nearby_agents = self._get_nearby_agents(predator, 5.0)
+            
+            # Find prey to eat
+            for prey in nearby_agents:
+                if prey.type == "prey" and prey in prey_agents and prey_agents[prey]:
+                    # Predator eats prey
+                    energy_gain = min(prey.energy, 50)  # Cap energy gain
+                    predator.energy += energy_gain
+                    prey.alive = False
+                    prey_agents[prey] = False  # Mark as eaten
+                    break  # Only eat one prey per step
+        
+            # STEP 5: Process reproduction and agent updates
+            for agent, (action, observation) in agent_actions.items():
+                if not agent.alive:
+                    continue
+                    
+                # Add last action to observation for energy updates
+                observation["last_action"] = action
+                    
+                # Update agent internal state
+                agent.update(observation)
+                
+                # Try reproduction
+                offspring = agent.try_reproduce()
+                if offspring:
+                    offspring.position = self.wrap_position(offspring.position)
+                    new_agents.append(offspring)
+            
+            # STEP 6: Remove eaten prey
+            self.agents = [agent for agent in self.agents if agent.alive]
+            
+            # STEP 7: Add new agents from reproduction
+            for offspring in new_agents:
+                self.add_agent(offspring)
     
     def _move_agent(self, agent: Agent, action: int) -> None:
         """

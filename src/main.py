@@ -49,8 +49,19 @@ DEFAULT_CONFIG = {
     "SPATIAL_CELL_SIZE": 50  # Cell size for spatial partitioning
 }
 
+# Add this to main.py
+class LogLevel:
+    NONE = 0
+    ERROR = 1
+    WARN = 2
+    INFO = 3
+    DEBUG = 4
+
+log_level = LogLevel.ERROR  # Only show errors by default
+
 
 class SimulationApp:
+    log_level = LogLevel.ERROR  # Only show errors by default
     """
     Main application class for the predator-prey simulation.
     
@@ -205,35 +216,31 @@ class SimulationApp:
             print(f"Error setting up replay: {e}")
             sys.exit(1)
     
-    def run(self) -> None:
+    # Replace the run method in SimulationApp class
+    def run_optimized(self) -> None:
         """
-        Run the main simulation loop.
+        Run the optimized main simulation loop.
         """
-        print("\n=== Starting Simulation ===")
+        log(LogLevel.INFO, "\n=== Starting Simulation ===")
         
-        # Initialize pygame
-        print("Checking pygame initialization...")
+        # Initialize pygame and world
         if not pygame.get_init():
-            print("Pygame not initialized, initializing now...")
             pygame.init()
-        else:
-            print("Pygame already initialized")
         
-        # Initialize world
-        print("Initializing world...")
         self.initialize_world()
-        print(f"World initialized with {len(self.world.agents)} agents")
         
         # Main loop variables
         running = True
         paused = False
         sim_speed = 1.0
-        last_train_time = 0
-        last_save_time = 0
+        render_interval = 0.05  # Render every 50ms (20 FPS target)
+        last_render_time = 0
         
         # Main simulation loop
         while running:
-            # Handle events
+            current_time = time.time()
+            
+            # Handle events at full speed
             running, actions = self.renderer.handle_events()
             
             # Process actions
@@ -250,12 +257,16 @@ class SimulationApp:
             if "follow" in actions:
                 self.camera.follow(actions["follow"])
             
-            # Simulation step
+            # Simulation step (decoupled from rendering)
             if not paused:
-                start_time = time.time()
+                # Limit rendering to target FPS, but run simulation at full speed
+                render_now = current_time - last_render_time >= render_interval
+                
+                # Simulation time measurement
+                sim_start_time = time.time()
                 
                 if self.is_replay:
-                    # In replay mode, load next state
+                    # Replay mode logic (unchanged)
                     if self.current_replay_index < len(self.replay_timesteps):
                         timestep = self.replay_timesteps[self.current_replay_index]
                         self.storage.open('r')
@@ -265,32 +276,33 @@ class SimulationApp:
                         self.stats = stats if stats else {}
                         self.current_replay_index += 1
                     else:
-                        # Reached end of replay
                         paused = True
-                        print("End of replay reached.")
+                        log(LogLevel.INFO, "End of replay reached.")
                 else:
-                    # Normal simulation mode
-                    # Perform multiple steps based on speed
+                    # Normal simulation mode - run multiple steps based on speed
                     steps = max(1, int(sim_speed))
                     for _ in range(steps):
                         self._simulation_step()
                 
-                # Track time taken for simulation step
-                self.renderer.set_simulation_time(time.time() - start_time)
-            
-            # Update charts
-            self.charts.update(self.stats_history)
-            print(f"Updated charts with stats: {self.stats}")
-            
-            # Render the simulation
-            print(f"Rendering world with {len(self.world.agents)} agents (Prey: {self.stats.get('prey_count', 0)}, Predators: {self.stats.get('predator_count', 0)})")
-            try:
+                # Track simulation time
+                sim_time = time.time() - sim_start_time
+                self.renderer.set_simulation_time(sim_time)
+                
+                # Render only if enough time has passed since last render
+                if render_now:
+                    # Update charts and render (moved outside simulation steps)
+                    self.charts.update(self.stats_history)
+                    self.renderer.render(self.world, self.stats)
+                    last_render_time = current_time
+                    
+                    # Cap framerate to avoid burning CPU on rendering
+                    elapsed = time.time() - current_time
+                    if elapsed < render_interval:
+                        time.sleep(render_interval - elapsed)
+            else:
+                # When paused, render at a low rate to save CPU
+                time.sleep(0.1)  # 10 FPS when paused
                 self.renderer.render(self.world, self.stats)
-                print("Rendering completed successfully")
-            except Exception as e:
-                print(f"ERROR during rendering: {e}")
-                import traceback
-                traceback.print_exc()
         
         # Cleanup when done
         self.cleanup()
@@ -508,6 +520,12 @@ def parse_args():
                         help="Height of the display window")
     
     return parser.parse_args()
+
+
+def log(level, message):
+    """Conditionally print log messages based on current log level."""
+    if level <= log_level:
+        print(message)
 
 
 def main():
