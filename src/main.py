@@ -312,7 +312,7 @@ class SimulationApp:
         Perform a single simulation step.
         """
         # Step the world
-        self.world.step()
+        self.world.step_optimized()
         
         # Collect experience for RL training
         if self.is_training:
@@ -573,7 +573,7 @@ def main():
             print(f"Error loading policies: {e}")
     
     # Run simulation
-    app.run()
+    app.run_optimized()
 
 
 if __name__ == "__main__":

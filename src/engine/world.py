@@ -96,78 +96,78 @@ class World:
         observation = {
             "energy": agent.energy,
             "position": agent.position.copy(),
-            "vision": self._get_vision_rays(agent),
+            "vision": self._get_vision_rays_optimized(agent, 4, 75.0),
             "timestamp": self.timestep
         }
         
         return observation
     
     # Optimized vision ray calculation
-def _get_vision_rays_optimized(self, agent: Agent, num_rays: int = 4, 
-                     vision_range: float = 100.0) -> List[Dict[str, Any]]:
-    """Optimized vision ray calculation using spatial partitioning."""
-    rays = []
-    
-    # Use fewer rays (reduce from 8 to 4)
-    for i in range(num_rays):
-        angle = 2 * np.pi * i / num_rays
-        direction = np.array([np.cos(angle), np.sin(angle)])
+    def _get_vision_rays_optimized(self, agent: Agent, num_rays: int = 4, 
+                        vision_range: float = 100.0) -> List[Dict[str, Any]]:
+        """Optimized vision ray calculation using spatial partitioning."""
+        rays = []
         
-        # Find the closest agent in this direction using spatial index
-        closest_agent = None
-        closest_distance = vision_range
-        
-        # Compute ray endpoint
-        ray_end = agent.position + direction * vision_range
-        
-        # Get candidates from spatial index (much faster than checking all agents)
-        if self.spatial_index is not None:
-            # Create a search box along the ray
-            search_width = 10.0  # Width of search box
-            perpendicular = np.array([-direction[1], direction[0]]) * search_width/2
+        # Use fewer rays (reduce from 8 to 4)
+        for i in range(num_rays):
+            angle = 2 * np.pi * i / num_rays
+            direction = np.array([np.cos(angle), np.sin(angle)])
             
-            # Check cells that intersect with this ray path
-            cells_to_check = self._get_cells_along_ray(agent.position, ray_end, search_width)
-            candidates = []
-            for cell in cells_to_check:
-                row, col = cell
-                if 0 <= row < self.spatial_index.rows and 0 <= col < self.spatial_index.cols:
-                    candidates.extend(self.spatial_index.grid[row][col])
-        else:
-            candidates = self.agents
-        
-        # Process only agent candidates from spatial index
-        for other in candidates:
-            if other is agent:
-                continue
+            # Find the closest agent in this direction using spatial index
+            closest_agent = None
+            closest_distance = vision_range
             
-            # Calculate vector to other agent
-            to_other = other.position - agent.position
+            # Compute ray endpoint
+            ray_end = agent.position + direction * vision_range
             
-            # Handle wraparound for distance calculation
-            to_other[0] = (to_other[0] + self.width / 2) % self.width - self.width / 2
-            to_other[1] = (to_other[1] + self.height / 2) % self.height - self.height / 2
+            # Get candidates from spatial index (much faster than checking all agents)
+            if self.spatial_index is not None:
+                # Create a search box along the ray
+                search_width = 10.0  # Width of search box
+                perpendicular = np.array([-direction[1], direction[0]]) * search_width/2
+                
+                # Check cells that intersect with this ray path
+                cells_to_check = self._get_cells_along_ray(agent.position, ray_end, search_width)
+                candidates = []
+                for cell in cells_to_check:
+                    row, col = cell
+                    if 0 <= row < self.spatial_index.rows and 0 <= col < self.spatial_index.cols:
+                        candidates.extend(self.spatial_index.grid[row][col])
+            else:
+                candidates = self.agents
             
-            # Project onto ray direction
-            projection = np.dot(to_other, direction)
+            # Process only agent candidates from spatial index
+            for other in candidates:
+                if other is agent:
+                    continue
+                
+                # Calculate vector to other agent
+                to_other = other.position - agent.position
+                
+                # Handle wraparound for distance calculation
+                to_other[0] = (to_other[0] + self.width / 2) % self.width - self.width / 2
+                to_other[1] = (to_other[1] + self.height / 2) % self.height - self.height / 2
+                
+                # Project onto ray direction
+                projection = np.dot(to_other, direction)
+                
+                if projection <= 0:  # Behind the agent
+                    continue
+                
+                # Calculate perpendicular distance to ray
+                perp_dist = np.linalg.norm(to_other - projection * direction)
+                
+                # If within the ray's width and closer than current closest
+                if perp_dist < 5.0 and projection < closest_distance:
+                    closest_agent = other
+                    closest_distance = projection
             
-            if projection <= 0:  # Behind the agent
-                continue
-            
-            # Calculate perpendicular distance to ray
-            perp_dist = np.linalg.norm(to_other - projection * direction)
-            
-            # If within the ray's width and closer than current closest
-            if perp_dist < 5.0 and projection < closest_distance:
-                closest_agent = other
-                closest_distance = projection
-        
-        # Record the ray result
-        ray_result = {
-            "distance": closest_distance if closest_agent else vision_range,
-            "type": closest_agent.type if closest_agent else "none"
-        }
-        rays.append(ray_result)
+            # Record the ray result
+            ray_result = {
+                "distance": closest_distance if closest_agent else vision_range,
+                "type": closest_agent.type if closest_agent else "none"
+            }
+            rays.append(ray_result)
     
         return rays
 

@@ -1,3 +1,6 @@
+import numpy as np
+from typing import List, Tuple, Any
+
 class OptimizedSpatialGrid:
     """
     Optimized grid-based spatial partitioning structure.
