@@ -112,8 +112,13 @@ class SimulationCharts:
         self.ax2.set_ylim(0, max(100, energy_max))
         
         # Auto-adjust x-axis
-        self.ax1.set_xlim(min(timesteps), max(timesteps))
-        self.ax2.set_xlim(min(timesteps), max(timesteps))
+        if len(timesteps) > 1:
+            self.ax1.set_xlim(min(timesteps), max(timesteps))
+            self.ax2.set_xlim(min(timesteps), max(timesteps))
+        else:
+            # If only one timestep, create a small range
+            self.ax1.set_xlim(min(timesteps) - 1, max(timesteps) + 1)
+            self.ax2.set_xlim(min(timesteps) - 1, max(timesteps) + 1)
         
         # Redraw figure
         self.fig.canvas.draw()

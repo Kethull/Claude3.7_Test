@@ -47,7 +47,10 @@ class World:
         """
         self.agents.append(agent)
         if self.spatial_index is not None:
-            self.spatial_index.insert(agent)
+            try:
+                self.spatial_index.insert(agent)
+            except Exception as e:
+                print(f"ERROR inserting agent into spatial index: {e}")
     
     def remove_agent(self, agent: Agent) -> None:
         """
@@ -304,10 +307,16 @@ class World:
             spatial_index: The spatial index structure to use.
         """
         self.spatial_index = spatial_index
+        print(f"Setting spatial index: {type(spatial_index).__name__}")
         
         # Insert all existing agents into the spatial index
         for agent in self.agents:
-            spatial_index.insert(agent)
+            try:
+                spatial_index.insert(agent)
+            except Exception as e:
+                print(f"ERROR inserting agent into spatial index during setup: {e}")
+        
+        print(f"Inserted {len(self.agents)} agents into spatial index")
     
     def get_stats(self) -> Dict[str, Any]:
         """

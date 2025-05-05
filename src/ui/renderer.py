@@ -37,14 +37,31 @@ class Renderer:
             height (int): Height of the display.
         """
         # Initialize pygame
-        pygame.init()
-        pygame.font.init()
+        print("Initializing pygame in Renderer...")
+        if not pygame.get_init():
+            pygame.init()
+            print("Pygame initialized in Renderer")
+        else:
+            print("Pygame already initialized in Renderer")
+            
+        if not pygame.font.get_init():
+            pygame.font.init()
+            print("Pygame font initialized in Renderer")
+        else:
+            print("Pygame font already initialized in Renderer")
         
         # Display settings
         self.width = width
         self.height = height
-        self.screen = pygame.display.set_mode((width, height))
-        pygame.display.set_caption("Predator-Prey Simulation")
+        print(f"Setting up display with dimensions: {width}x{height}")
+        try:
+            self.screen = pygame.display.set_mode((width, height))
+            pygame.display.set_caption("Predator-Prey Simulation")
+            print("Display set up successfully")
+        except Exception as e:
+            print(f"ERROR setting up display: {e}")
+            import traceback
+            traceback.print_exc()
         
         # Fonts
         self.font_small = pygame.font.SysFont("Arial", 14)
@@ -183,8 +200,23 @@ class Renderer:
         """
         start_time = time.time()
         
+        # Check if pygame is still running
+        if not pygame.get_init():
+            print("ERROR: Pygame not initialized during render")
+            pygame.init()
+            
+        # Check if display is set up
+        if not self.screen:
+            print("ERROR: Display not set up")
+            return
+            
         # Clear screen
-        self.screen.fill(self.bg_color)
+        try:
+            self.screen.fill(self.bg_color)
+            print("Screen cleared with background color")
+        except Exception as e:
+            print(f"ERROR filling screen: {e}")
+            return
         
         # Update camera if following an agent
         if self.camera:
@@ -265,7 +297,10 @@ class Renderer:
             world: World object containing agents.
         """
         if not self.camera:
+            print("ERROR: Camera not set in renderer")
             return
+        
+        print(f"Rendering {len(world.agents)} agents")
         
         # Get screen boundaries in world coordinates
         screen_left = self.camera.position[0] - self.width / (2 * self.camera.zoom)
@@ -277,13 +312,16 @@ class Renderer:
         buffer = 50
         
         # Render each agent
+        agents_rendered = 0
         for agent in world.agents:
             # Skip agents far outside the viewport
-            if (agent.position[0] < screen_left - buffer or 
+            if (agent.position[0] < screen_left - buffer or
                 agent.position[0] > screen_right + buffer or
                 agent.position[1] < screen_top - buffer or
                 agent.position[1] > screen_bottom + buffer):
                 continue
+            
+            agents_rendered += 1
             
             # Convert world position to screen position
             screen_pos = self.camera.world_to_screen(agent.position, self.width, self.height)
@@ -295,7 +333,12 @@ class Renderer:
             color = agent.get_color()
             
             # Draw agent
-            pygame.draw.circle(self.screen, color, screen_pos.astype(int), radius)
+            try:
+                pygame.draw.circle(self.screen, color, screen_pos.astype(int), radius)
+                if agents_rendered <= 5:  # Log details for first few agents
+                    print(f"Drew {agent.type} at world pos {agent.position}, screen pos {screen_pos}, color {color}, radius {radius}")
+            except Exception as e:
+                print(f"ERROR drawing agent: {e}, pos: {screen_pos}, type: {agent.type}")
             
             # Highlight selected agent
             if agent == self.selected_agent:
@@ -335,6 +378,8 @@ class Renderer:
                     energy_color = (200, 200, 0)
                 
                 pygame.draw.rect(self.screen, energy_color, energy_rect)
+        
+        print(f"Total agents rendered: {agents_rendered} out of {len(world.agents)}")
     
     def _render_ui(self, stats: Dict[str, Any]) -> None:
         """

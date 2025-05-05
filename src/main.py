@@ -34,7 +34,7 @@ DEFAULT_CONFIG = {
     "WORLD_HEIGHT": 500,
     "VISION_RAYS": 8,
     "VISION_RANGE": 100,
-    "INITIAL_PREY": 500,
+    "INITIAL_PREY": 50,
     "INITIAL_PREDATORS": 50,
     "PREY_REPRO_THRESHOLD": 120,
     "PRED_REPRO_THRESHOLD": 200,
@@ -86,8 +86,12 @@ class SimulationApp:
         self.renderer = Renderer(config["DISPLAY_WIDTH"], config["DISPLAY_HEIGHT"])
         self.charts = SimulationCharts()
         
+        print(f"Initialized world with dimensions: {config['WORLD_WIDTH']}x{config['WORLD_HEIGHT']}")
+        print(f"Initialized renderer with dimensions: {config['DISPLAY_WIDTH']}x{config['DISPLAY_HEIGHT']}")
+        
         # Connect components
         self.renderer.set_camera(self.camera)
+        print("Camera set in renderer")
         
         # Set up spatial partitioning
         cell_size = config["SPATIAL_CELL_SIZE"]
@@ -150,6 +154,7 @@ class SimulationApp:
             return
         
         # Create initial prey
+        print(f"Creating {self.config['INITIAL_PREY']} prey agents...")
         for i in range(self.config["INITIAL_PREY"]):
             pos = np.random.rand(2) * np.array([self.config["WORLD_WIDTH"], self.config["WORLD_HEIGHT"]])
             prey = Prey(pos, energy=np.random.uniform(80, 120))
@@ -158,12 +163,15 @@ class SimulationApp:
             self.world.add_agent(prey)
         
         # Create initial predators
+        print(f"Creating {self.config['INITIAL_PREDATORS']} predator agents...")
         for i in range(self.config["INITIAL_PREDATORS"]):
             pos = np.random.rand(2) * np.array([self.config["WORLD_WIDTH"], self.config["WORLD_HEIGHT"]])
             predator = Predator(pos, energy=np.random.uniform(130, 170))
             predator.policy = self.predator_policy
             predator.reproduction_threshold = self.config["PRED_REPRO_THRESHOLD"]
             self.world.add_agent(predator)
+        
+        print(f"World initialized with {len(self.world.agents)} total agents")
     
     def _setup_replay(self) -> None:
         """
@@ -201,8 +209,20 @@ class SimulationApp:
         """
         Run the main simulation loop.
         """
+        print("\n=== Starting Simulation ===")
+        
+        # Initialize pygame
+        print("Checking pygame initialization...")
+        if not pygame.get_init():
+            print("Pygame not initialized, initializing now...")
+            pygame.init()
+        else:
+            print("Pygame already initialized")
+        
         # Initialize world
+        print("Initializing world...")
         self.initialize_world()
+        print(f"World initialized with {len(self.world.agents)} agents")
         
         # Main loop variables
         running = True
@@ -260,9 +280,17 @@ class SimulationApp:
             
             # Update charts
             self.charts.update(self.stats_history)
+            print(f"Updated charts with stats: {self.stats}")
             
             # Render the simulation
-            self.renderer.render(self.world, self.stats)
+            print(f"Rendering world with {len(self.world.agents)} agents (Prey: {self.stats.get('prey_count', 0)}, Predators: {self.stats.get('predator_count', 0)})")
+            try:
+                self.renderer.render(self.world, self.stats)
+                print("Rendering completed successfully")
+            except Exception as e:
+                print(f"ERROR during rendering: {e}")
+                import traceback
+                traceback.print_exc()
         
         # Cleanup when done
         self.cleanup()
@@ -486,6 +514,16 @@ def main():
     """
     Main function to run the simulation.
     """
+    print("Starting predator-prey simulation...")
+    
+    # Check pygame initialization
+    print("Checking pygame initialization...")
+    if not pygame.get_init():
+        print("Initializing pygame...")
+        pygame.init()
+    else:
+        print("Pygame already initialized")
+    
     args = parse_args()
     
     # Configure simulation

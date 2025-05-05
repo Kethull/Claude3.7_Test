@@ -218,9 +218,20 @@ class SpatialGrid:
         Returns:
             Tuple[int, int]: Column and row indices.
         """
-        col = min(int(position[0] // self.cell_size), self.cols - 1)
-        row = min(int(position[1] // self.cell_size), self.rows - 1)
-        return col, row
+        try:
+            # Ensure position is within world bounds
+            if not (0 <= position[0] < self.width and 0 <= position[1] < self.height):
+                print(f"WARNING: Position {position} outside world bounds ({self.width}x{self.height})")
+                # Wrap around position
+                position = np.array([position[0] % self.width, position[1] % self.height])
+                
+            col = min(int(position[0] // self.cell_size), self.cols - 1)
+            row = min(int(position[1] // self.cell_size), self.rows - 1)
+            return col, row
+        except Exception as e:
+            print(f"ERROR in get_cell_indices: {e}, position: {position}")
+            # Return safe default values
+            return 0, 0
     
     def insert(self, agent) -> None:
         """
@@ -229,9 +240,16 @@ class SpatialGrid:
         Args:
             agent: The agent to insert.
         """
-        col, row = self.get_cell_indices(agent.position)
-        if agent not in self.grid[row][col]:
-            self.grid[row][col].append(agent)
+        try:
+            col, row = self.get_cell_indices(agent.position)
+            if col < 0 or col >= self.cols or row < 0 or row >= self.rows:
+                print(f"ERROR: Invalid cell indices: ({col}, {row}) for position {agent.position}")
+                return
+            
+            if agent not in self.grid[row][col]:
+                self.grid[row][col].append(agent)
+        except Exception as e:
+            print(f"ERROR in spatial grid insert: {e}, agent position: {agent.position}, type: {agent.type}")
     
     def remove(self, agent) -> None:
         """
